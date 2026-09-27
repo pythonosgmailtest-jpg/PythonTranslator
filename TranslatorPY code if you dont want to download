@@ -1,0 +1,270 @@
+import tkinter as tk
+from tkinter import ttk
+import urllib.request
+import urllib.parse
+import json
+import subprocess
+
+class NativeTranslator(tk.Tk):
+    def __init__(self):
+        super().__init__()
+
+        # Window Configuration
+        self.title("Chat Translator")
+        self.geometry("460x570")
+        self.configure(bg="#2b2b2b")
+        
+        # Always on Top
+        self.is_pinned = False
+        self.attributes("-topmost", False)
+        self.resizable(False, False)
+
+        # Supported Languages
+        self.languages = {
+            "Turkish": "tr",
+            "Italian": "it",
+            "Spanish": "es",
+            "English": "en",
+            "Russian": "ru",
+            "Chinese": "zh-CN",
+            "Arabic": "ar",
+            "German": "de",
+            "French": "fr"
+        }
+
+        self.setup_ui()
+
+    def setup_ui(self):
+        # Notebook Style
+        style = ttk.Style()
+        style.theme_use('clam')
+        style.configure("TNotebook", background="#2b2b2b", borderwidth=0)
+        style.configure("TNotebook.Tab", background="#3c3f41", foreground="#ffffff", padding=[10, 5], font=('Arial', 9, 'bold'))
+        style.map("TNotebook.Tab", background=[("selected", "#365880")], foreground=[("selected", "#ffffff")])
+
+        # Header Frame
+        header_frame = tk.Frame(self, bg="#2b2b2b")
+        header_frame.pack(fill="x", padx=15, pady=(10, 5))
+
+        title_label = tk.Label(header_frame, text="Translation Panel", font=("Arial", 12, "bold"), fg="#ffffff", bg="#2b2b2b")
+        title_label.pack(side="left")
+
+        self.btn_pin = tk.Button(
+            header_frame,
+            text="Pin (Off)",
+            font=("Arial", 8, "bold"),
+            bg="#4a4a4a",
+            fg="#ffffff",
+            relief="flat",
+            command=self.toggle_pin
+        )
+        self.btn_pin.pack(side="right")
+
+        # TAB SYSTEM
+        self.notebook = ttk.Notebook(self)
+        self.notebook.pack(fill="both", expand=True, padx=15, pady=5)
+
+        # 1. SEKME (SOLDA): Text Translate
+        self.tab_translate = tk.Frame(self.notebook, bg="#2b2b2b")
+        self.notebook.add(self.tab_translate, text=" Text Translate ")
+
+        # 2. SEKME (SAĞDA): Phonetic & Translate
+        self.tab_pronounce = tk.Frame(self.notebook, bg="#2b2b2b")
+        self.notebook.add(self.tab_pronounce, text=" Phonetic & Translate ")
+
+        # Sekme İçeriklerini Yükle
+        self.build_translate_tab()
+        self.build_pronounce_tab()
+
+        # Status Bar
+        self.status_label = tk.Label(self, text="Always on Top Disabled", font=("Arial", 9), fg="#ffffff", bg="#2b2b2b")
+        self.status_label.pack(anchor="w", padx=20, pady=(0, 10))
+
+    def build_translate_tab(self):
+        header_sub = tk.Frame(self.tab_translate, bg="#2b2b2b")
+        header_sub.pack(fill="x", pady=(10, 2))
+
+        lbl = tk.Label(header_sub, text="Input Text:", font=("Arial", 9, "bold"), fg="#a0a0a0", bg="#2b2b2b")
+        lbl.pack(side="left")
+
+        self.lang_target = tk.StringVar(value="Spanish")
+        menu_lang = ttk.OptionMenu(header_sub, self.lang_target, "Spanish", *self.languages.keys())
+        menu_lang.pack(side="right")
+
+        self.input_tr = tk.Entry(self.tab_translate, font=("Arial", 11), bg="#3c3f41", fg="#ffffff", insertbackground="white", relief="flat")
+        self.input_tr.pack(fill="x", ipady=6, pady=5)
+        self.input_tr.bind("<Return>", lambda event: self.get_translation())
+
+        # Translate Button
+        btn_translate = tk.Button(
+            self.tab_translate, 
+            text="Translate", 
+            font=("Arial", 10, "bold"), 
+            bg="#365880", 
+            fg="#ffffff", 
+            activebackground="#436895",
+            relief="flat",
+            command=self.get_translation
+        )
+        btn_translate.pack(fill="x", pady=5, ipady=5)
+
+        lbl_out = tk.Label(self.tab_translate, text="Translation Result:", font=("Arial", 9, "bold"), fg="#a0a0a0", bg="#2b2b2b")
+        lbl_out.pack(anchor="w", pady=(5, 2))
+
+        self.box_tr = tk.Text(self.tab_translate, height=6, font=("Arial", 11), bg="#3c3f41", fg="#ffffff", relief="flat")
+        self.box_tr.pack(fill="x", pady=5)
+
+        # Action Buttons
+        bottom = tk.Frame(self.tab_translate, bg="#2b2b2b")
+        bottom.pack(fill="x", pady=10)
+
+        btn_clear = tk.Button(bottom, text="Clear", font=("Arial", 9), bg="#4a4a4a", fg="#ffffff", relief="flat", command=lambda: self.clear_fields(self.input_tr, self.box_tr))
+        btn_clear.pack(side="right", padx=(5, 0), ipadx=10)
+
+        btn_copy = tk.Button(bottom, text="Copy", font=("Arial", 9, "bold"), bg="#2b8a3e", fg="#ffffff", relief="flat", command=lambda: self.copy_text(self.box_tr.get("1.0", "end-1c")))
+        btn_copy.pack(side="right", ipadx=10)
+
+    def build_pronounce_tab(self):
+        top_frame = tk.Frame(self.tab_pronounce, bg="#2b2b2b")
+        top_frame.pack(fill="x", pady=(10, 2))
+
+        lbl = tk.Label(top_frame, text="Input Text (Russian, etc.):", font=("Arial", 9, "bold"), fg="#a0a0a0", bg="#2b2b2b")
+        lbl.pack(side="left")
+
+        self.lang_target_ph = tk.StringVar(value="Turkish")
+        menu_lang = ttk.OptionMenu(top_frame, self.lang_target_ph, "Turkish", *self.languages.keys())
+        menu_lang.pack(side="right")
+
+        self.input_ph = tk.Entry(self.tab_pronounce, font=("Arial", 11), bg="#3c3f41", fg="#ffffff", insertbackground="white", relief="flat")
+        self.input_ph.pack(fill="x", ipady=6, pady=5)
+        self.input_ph.bind("<Return>", lambda event: self.get_pronunciation_and_translation())
+
+        # Translate Button
+        btn_translate = tk.Button(
+            self.tab_pronounce, 
+            text="Translate", 
+            font=("Arial", 10, "bold"), 
+            bg="#365880", 
+            fg="#ffffff", 
+            activebackground="#436895",
+            relief="flat",
+            command=self.get_pronunciation_and_translation
+        )
+        btn_translate.pack(fill="x", pady=4, ipady=4)
+
+        # Phonetic Output
+        lbl_ph = tk.Label(self.tab_pronounce, text="Phonetic (Latin):", font=("Arial", 9, "bold"), fg="#4dabf7", bg="#2b2b2b")
+        lbl_ph.pack(anchor="w", pady=(5, 0))
+
+        self.box_ph = tk.Text(self.tab_pronounce, height=3, font=("Arial", 11, "italic"), bg="#3c3f41", fg="#4dabf7", relief="flat")
+        self.box_ph.pack(fill="x", pady=3)
+
+        # Target Language Meaning Output
+        lbl_tr = tk.Label(self.tab_pronounce, text="Meaning in Target Language:", font=("Arial", 9, "bold"), fg="#2b8a3e", bg="#2b2b2b")
+        lbl_tr.pack(anchor="w", pady=(5, 0))
+
+        self.box_ph_tr = tk.Text(self.tab_pronounce, height=3, font=("Arial", 11), bg="#3c3f41", fg="#ffffff", relief="flat")
+        self.box_ph_tr.pack(fill="x", pady=3)
+
+        # Action Buttons
+        bottom = tk.Frame(self.tab_pronounce, bg="#2b2b2b")
+        bottom.pack(fill="x", pady=8)
+
+        btn_clear = tk.Button(bottom, text="Clear", font=("Arial", 9), bg="#4a4a4a", fg="#ffffff", relief="flat", command=lambda: self.clear_fields_multi(self.input_ph, self.box_ph, self.box_ph_tr))
+        btn_clear.pack(side="right", padx=(5, 0), ipadx=8)
+
+        btn_copy_tr = tk.Button(bottom, text="Copy Translation", font=("Arial", 9, "bold"), bg="#2b8a3e", fg="#ffffff", relief="flat", command=lambda: self.copy_text(self.box_ph_tr.get("1.0", "end-1c")))
+        btn_copy_tr.pack(side="right", ipadx=8)
+
+        btn_copy_ph = tk.Button(bottom, text="Copy Phonetic", font=("Arial", 9), bg="#365880", fg="#ffffff", relief="flat", command=lambda: self.copy_text(self.box_ph.get("1.0", "end-1c")))
+        btn_copy_ph.pack(side="right", padx=(0, 5), ipadx=6)
+
+    def toggle_pin(self):
+        self.is_pinned = not self.is_pinned
+        self.attributes("-topmost", self.is_pinned)
+        if self.is_pinned:
+            self.btn_pin.config(text="Pin (On)", bg="#2b8a3e")
+            self.show_status("Always on Top Enabled", "#2b8a3e")
+        else:
+            self.btn_pin.config(text="Pin (Off)", bg="#4a4a4a")
+            self.show_status("Always on Top Disabled", "#ffffff")
+
+    def get_pronunciation_and_translation(self):
+        text = self.input_ph.get().strip()
+        target_code = self.languages.get(self.lang_target_ph.get(), "tr")
+        
+        if text:
+            try:
+                encoded_text = urllib.parse.quote(text, encoding='utf-8')
+                url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={target_code}&dt=t&dt=rm&q={encoded_text}"
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                
+                with urllib.request.urlopen(req) as response:
+                    data = json.loads(response.read().decode('utf-8'))
+                    
+                    translated_parts = [segment[0] for segment in data[0] if segment[0] is not None]
+                    translated_text = "".join(translated_parts)
+
+                    phonetic_text = ""
+                    if len(data) > 0 and len(data[0]) > 0:
+                        for item in data[0]:
+                            if len(item) >= 3 and item[2] is not None:
+                                phonetic_text = item[2]
+                            elif len(item) >= 4 and item[3] is not None:
+                                phonetic_text = item[3]
+
+                self.box_ph.delete("1.0", "end")
+                res_ph = phonetic_text if phonetic_text else text
+                self.box_ph.insert("1.0", res_ph)
+
+                self.box_ph_tr.delete("1.0", "end")
+                self.box_ph_tr.insert("1.0", translated_text)
+
+                self.show_status("Translated!", "#2b8a3e")
+            except Exception as e:
+                self.show_status("Error occurred!", "#ff6b6b")
+
+    def get_translation(self):
+        text = self.input_tr.get().strip()
+        target_code = self.languages.get(self.lang_target.get(), "es")
+        if text:
+            try:
+                encoded_text = urllib.parse.quote(text, encoding='utf-8')
+                url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={target_code}&dt=t&q={encoded_text}"
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                
+                with urllib.request.urlopen(req) as response:
+                    data = json.loads(response.read().decode('utf-8'))
+                    translated_parts = [segment[0] for segment in data[0] if segment[0] is not None]
+                    translated_text = "".join(translated_parts)
+
+                self.box_tr.delete("1.0", "end")
+                self.box_tr.insert("1.0", translated_text)
+                self.show_status("Translated!", "#2b8a3e")
+            except Exception as e:
+                self.show_status("Error occurred!", "#ff6b6b")
+
+    def copy_text(self, text):
+        text = text.strip()
+        if text:
+            process = subprocess.Popen('clip', stdin=subprocess.PIPE, close_fds=True, shell=True)
+            process.communicate(input=text.encode('utf-16'))
+            self.show_status("Copied to Clipboard!", "#2b8a3e")
+
+    def clear_fields(self, entry_widget, text_widget):
+        entry_widget.delete(0, "end")
+        text_widget.delete("1.0", "end")
+        self.show_status("", "#ffffff")
+
+    def clear_fields_multi(self, entry_widget, text_widget1, text_widget2):
+        entry_widget.delete(0, "end")
+        text_widget1.delete("1.0", "end")
+        text_widget2.delete("1.0", "end")
+        self.show_status("", "#ffffff")
+
+    def show_status(self, message, color):
+        self.status_label.config(text=message, fg=color)
+
+if __name__ == "__main__":
+    app = NativeTranslator()
+    app.mainloop()
