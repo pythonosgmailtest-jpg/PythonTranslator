@@ -1,2 +1,1 @@
-# PythonTranslator
-A python translator better than google translate
+Open TranslatorPY and read the text file
